@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LOL MOCK BANPICK SIMULATOR
+
+LCK 감성의 프리미엄 UI로 제작한 LoL 밴픽 시뮬레이터입니다.  
+팀별 밴/픽 진행, 세트 스코어 추적, 스왑 페이즈, 타이머/무제한 모드를 통해 실전형 밴픽 전략을 빠르게 검증할 수 있습니다.
+
+## Highlights
+
+- LCK 스타일 다크/네온 UI와 글래스모피즘 인터랙션
+- Fearless 모드 지원 (`HARD`, `SOFT`, `TOURNAMENT`)
+- 초성 검색 기반 챔피언 필터링
+- 밴픽 완료 후 같은 팀 내 순차 클릭 스왑 페이즈
+- 세트/시리즈 진행 관리 (`BO3`, `BO5`) 및 시리즈 종료 모달
+- 시간 제한 ON/OFF + 무제한 모드 인피니티 루프 UI
+
+## Tech Stack
+
+- Next.js (App Router)
+- React + TypeScript
+- Tailwind CSS
+- Framer Motion
+- Zustand
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 `http://localhost:3000`으로 접속하세요.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Production Build
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm run start
+```
 
-## Learn More
+## Deploy (Vercel)
 
-To learn more about Next.js, take a look at the following resources:
+1. Vercel에 레포지토리 연결
+2. Framework Preset: Next.js
+3. Build Command: `npm run build`
+4. Output: Next.js 기본값 사용
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Privacy & Terms
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- 개인정보 처리방침 / 이용약관 모달 내 고지 문구 포함
+- Riot Games 비공식 팬 프로젝트 고지 포함
 
-## Deploy on Vercel
+## Disclaimer
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is not affiliated with or endorsed by Riot Games, Inc.  
+League of Legends and all related assets are trademarks or registered trademarks of Riot Games, Inc.
