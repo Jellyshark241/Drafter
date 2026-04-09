@@ -90,7 +90,7 @@ export const CHAMPION_ALIASES: Record<string, string[]> = {
   LeeSin: ["리신", "리 신"],
   MonkeyKing: ["손오공", "원숭이", "오공", "wukong"],
   AurelionSol: ["아우솔", "아우렐리온솔", "별드래곤"],
-  JarvanIV: ["자르반", "자4"],
+  JarvanIV: ["자르반", "자4", "자르반4세"],
   XinZhao: ["신짜오", "짜오"],
   TwistedFate: ["트페", "tf"],
   MissFortune: ["미포", "mf"],
@@ -117,7 +117,6 @@ export const CHAMPION_ALIASES: Record<string, string[]> = {
   Leblanc: ["르블랑", "르블"],
   Renekton: ["레넥톤", "렉톤"],
   Trundle: ["트런들", "트런"],
-  JarvanIV: ["자르반4세", "자4", "자르반"],
 };
 
 export type ChampionSearchFields = {
