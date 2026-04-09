@@ -11,11 +11,11 @@ import { LaneIcon, type LaneIconVariant } from "@/components/lane-icon";
 import { SetScoreBadge } from "@/components/set-score-badge";
 import { DEFAULT_SPLASH_POSITION } from "@/lib/champion-splash-positions";
 import { fetchAllChampions, type ChampionCard } from "@/lib/lol";
-import { matchesChampionSearch } from "@/lib/hangul";
+import { createChampionSearchPredicate } from "@/lib/hangul";
 import { NONE_BAN_TOKEN, useBanPickStore } from "@/stores/banpick-store";
 import { useSettingsStore } from "@/stores/settings-store";
 
-const ROLES = ["ALL", "TOP", "JUNGLE", "MID", "ADC", "SUP"] as const;
+const ROLES = ["TOP", "JUNGLE", "MID", "ADC", "SUP"] as const;
 const PICK_ROLES = ["TOP", "JUNGLE", "MID", "ADC", "SUP"] as const;
 type PickRole = (typeof PICK_ROLES)[number];
 
@@ -35,15 +35,6 @@ const pickRoleToLane: Record<PickRole, LaneIconVariant> = {
   SUP: "SPT",
 };
 
-/** 필터 UI 표시용 (내부 값은 ROLES 그대로 유지) */
-const roleFilterDisplayLabel: Record<(typeof ROLES)[number], string> = {
-  ALL: "ALL",
-  TOP: "TOP",
-  JUNGLE: "JGL",
-  MID: "MID",
-  ADC: "ADC",
-  SUP: "SUP",
-};
 const TURN_SECONDS = 30;
 
 const draftModeDescription: Record<"SOFT" | "HARD" | "TOURNAMENT", string> = {
@@ -761,7 +752,7 @@ export default function Home() {
     advanceToNextSet,
     resetSeries,
   } = useSettingsStore();
-  const [activeRole, setActiveRole] = useState<(typeof ROLES)[number]>("ALL");
+  const [activeRole, setActiveRole] = useState<PickRole | null>(null);
   const [search, setSearch] = useState("");
   const [champions, setChampions] = useState<ChampionCard[]>([]);
   const [loadingChampions, setLoadingChampions] = useState(true);
@@ -939,15 +930,11 @@ export default function Home() {
     usedChampionsByRed,
   ]);
   const filteredChampions = useMemo(() => {
+    const matchesSearch = createChampionSearchPredicate(search);
     return champions.filter((champion) => {
-      const matchesRole =
-        activeRole === "ALL" ||
-        champion.positions.includes(
-          activeRole as Exclude<(typeof ROLES)[number], "ALL">,
-        );
-      const matchesSearch = matchesChampionSearch(champion, search);
+      const matchesRole = !activeRole || champion.positions.includes(activeRole);
 
-      return matchesRole && matchesSearch;
+      return matchesRole && matchesSearch(champion);
     });
   }, [activeRole, champions, search]);
 
@@ -1207,29 +1194,45 @@ export default function Home() {
             onSwapSelect={handleSwapSelect}
           />
 
-          <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40 p-3 backdrop-blur-xl shadow-[0_0_18px_rgba(59,130,246,0.08)] self-stretch">
+          <section className="flex h-[700px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40 p-3 backdrop-blur-xl shadow-[0_0_18px_rgba(59,130,246,0.08)] self-stretch">
             <div className="mb-2 shrink-0 border-b border-white/5 pb-1">
               <div className="flex items-center justify-center gap-6">
                 {ROLES.map((role) => {
                   const isActiveRole = activeRole === role;
+                  const roleIcon = pickRoleToLane[role];
+                  const activeRoleColor =
+                    activeTurn?.team === "blue"
+                      ? "text-cyan-200 drop-shadow-[0_0_8px_rgba(34,211,238,0.88)]"
+                      : activeTurn?.team === "red"
+                        ? "text-rose-200 drop-shadow-[0_0_8px_rgba(244,63,94,0.82)]"
+                        : "text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.75)]";
                   return (
                     <motion.button
                       key={role}
                       type="button"
-                      onClick={() => setActiveRole(role)}
+                      onClick={() =>
+                        setActiveRole((prev) => (prev === role ? null : role))
+                      }
                       whileTap={{ scale: 0.95 }}
+                      aria-pressed={isActiveRole}
                       className={cn(
-                        "relative cursor-pointer px-0.5 pb-1.5 pt-1 text-[11px] font-light uppercase tracking-[0.15em] transition-all",
-                        isActiveRole
-                          ? "text-white"
-                          : "text-slate-500 hover:text-slate-300 hover:opacity-100",
+                        "relative cursor-pointer px-0.5 pb-1.5 pt-1 transition-all",
+                        isActiveRole ? activeRoleColor : "text-slate-500 hover:text-slate-300",
                       )}
                     >
-                      {roleFilterDisplayLabel[role]}
+                      <LaneIcon variant={roleIcon} className="h-5 w-5" />
                       {isActiveRole ? (
                         <motion.div
                           layoutId="active-tab"
-                          className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-gradient-to-r from-cyan-500/0 via-cyan-400 to-cyan-500/0 shadow-[0_0_8px_rgba(6,182,212,0.6)]"
+                          className={cn(
+                            "absolute inset-x-0 bottom-0 h-[2px] rounded-full",
+                            activeTurn?.team === "blue" &&
+                              "bg-gradient-to-r from-cyan-500/0 via-cyan-300 to-cyan-500/0 shadow-[0_0_8px_rgba(6,182,212,0.6)]",
+                            activeTurn?.team === "red" &&
+                              "bg-gradient-to-r from-rose-500/0 via-rose-300 to-rose-500/0 shadow-[0_0_8px_rgba(244,63,94,0.6)]",
+                            !activeTurn?.team &&
+                              "bg-gradient-to-r from-white/0 via-white/90 to-white/0 shadow-[0_0_8px_rgba(255,255,255,0.65)]",
+                          )}
                           transition={{ type: "spring", stiffness: 500, damping: 36 }}
                         />
                       ) : null}
@@ -1254,9 +1257,9 @@ export default function Home() {
               />
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
             {loadingChampions ? (
-              <div className="champion-scroll grid min-h-0 flex-1 grid-cols-6 gap-[6px]">
+              <div className="champion-scroll grid h-full min-h-0 flex-1 content-start grid-cols-6 gap-[6px] overflow-y-auto">
                 {Array.from({ length: 36 }).map((_, idx) => (
                   <div
                     key={`skeleton-${idx}`}
@@ -1275,85 +1278,109 @@ export default function Home() {
                 </p>
               </div>
             ) : (
-              <div className="champion-scroll grid min-h-0 flex-1 grid-cols-6 gap-[6px]">
-                {filteredChampions.map((champion) => {
-                  const disabled = selectedChampionIds.has(champion.id);
-                  const isPending = pendingChampion === champion.id;
-                  const team = activeTurn?.team;
-                  return (
-                    <button
-                      key={champion.id}
-                      type="button"
-                      disabled={disabled || isSetFinished}
-                      onClick={() => {
-                        if (isSetFinished) return;
-                        setPendingChampion(champion.id);
-                      }}
-                      className={cn(
-                        "group flex w-full flex-col items-center text-left",
-                        (disabled || isSetFinished) &&
-                          "cursor-not-allowed opacity-50 grayscale",
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "relative flex w-full flex-col overflow-hidden rounded-md border transition-all duration-500",
-                          !isPending &&
-                            "border-t-white/20 border-l-white/15 border-r-white/5 border-b-white/10",
-                          !disabled &&
-                            !isSetFinished &&
-                            !isPending &&
-                            "group-hover:border-cyan-500/50 group-hover:shadow-[0_0_10px_rgba(6,182,212,0.4)]",
-                          isPending &&
-                            team === "blue" &&
-                            "border-cyan-400/85 shadow-[0_0_14px_rgba(45,115,255,0.55)]",
-                          isPending &&
-                            team === "red" &&
-                            "border-rose-400/85 shadow-[0_0_14px_rgba(230,69,106,0.55)]",
-                          isPending &&
-                            !team &&
-                            "border-amber-400/80 shadow-[0_0_14px_rgba(200,170,110,0.45)]",
-                        )}
-                      >
-                        <div className="relative aspect-square w-full overflow-hidden">
-                          <Image
-                            src={champion.image}
-                            alt={champion.nameKr}
-                            fill
-                            draggable={false}
-                            sizes="72px"
-                            className={cn(
-                              "object-cover object-center transition-transform duration-500",
-                              "scale-110 enabled:group-hover:scale-100",
-                            )}
-                          />
-                        </div>
-                        <p
+              <AnimatePresence mode="wait" initial={false}>
+                {filteredChampions.length === 0 ? (
+                  <motion.div
+                    key="empty-filter-result"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                    className="flex min-h-0 flex-1 items-center justify-center py-20 text-center text-white/40"
+                  >
+                    조건에 맞는 챔피언이 없습니다.
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="filtered-champion-grid"
+                    layout
+                    layoutScroll
+                    className="champion-scroll grid h-full min-h-0 flex-1 content-start grid-cols-6 gap-[6px] overflow-y-auto"
+                  >
+                    {filteredChampions.map((champion) => {
+                      const disabled = selectedChampionIds.has(champion.id);
+                      const isPending = pendingChampion === champion.id;
+                      const team = activeTurn?.team;
+                      return (
+                        <motion.button
+                          layout="position"
+                          key={champion.id}
+                          type="button"
+                          disabled={disabled || isSetFinished}
+                          onClick={() => {
+                            if (isSetFinished) return;
+                            setPendingChampion(champion.id);
+                          }}
+                          transition={{
+                            layout: { type: "spring", stiffness: 360, damping: 32 },
+                          }}
                           className={cn(
-                            "relative w-full truncate whitespace-nowrap border-t border-white/5 bg-slate-900/80 px-1 py-1 text-center text-[10px] font-light uppercase tracking-[0.15em] text-slate-300 backdrop-blur-md rounded-b-md transition-all duration-300",
-                            !disabled &&
-                              !isSetFinished &&
-                              "group-hover:bg-slate-800/60 group-hover:text-cyan-400",
+                            "group flex w-full flex-col items-center text-left",
+                            (disabled || isSetFinished) &&
+                              "cursor-not-allowed opacity-50 grayscale",
                           )}
                         >
-                          {champion.nameKr}
-                          <span
+                          <div
                             className={cn(
-                              "pointer-events-none absolute inset-x-2 bottom-0 h-px rounded-full opacity-0 transition-opacity duration-300",
+                              "relative flex w-full flex-col overflow-hidden rounded-md border transition-all duration-500",
+                              !isPending &&
+                                "border-t-white/20 border-l-white/15 border-r-white/5 border-b-white/10",
                               !disabled &&
                                 !isSetFinished &&
-                                "group-hover:opacity-100 group-hover:shadow-[0_0_10px_rgba(6,182,212,0.45)]",
+                                !isPending &&
+                                "group-hover:border-cyan-500/50 group-hover:shadow-[0_0_10px_rgba(6,182,212,0.4)]",
+                              isPending &&
+                                team === "blue" &&
+                                "border-cyan-400/85 shadow-[0_0_14px_rgba(45,115,255,0.55)]",
+                              isPending &&
+                                team === "red" &&
+                                "border-rose-400/85 shadow-[0_0_14px_rgba(230,69,106,0.55)]",
+                              isPending &&
+                                !team &&
+                                "border-amber-400/80 shadow-[0_0_14px_rgba(200,170,110,0.45)]",
                             )}
-                            aria-hidden
-                          />
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                          >
+                            <div className="relative aspect-square w-full overflow-hidden">
+                              <Image
+                                src={champion.image}
+                                alt={champion.nameKr}
+                                fill
+                                draggable={false}
+                                sizes="72px"
+                                className={cn(
+                                  "object-cover object-center transition-transform duration-500",
+                                  "scale-110 enabled:group-hover:scale-100",
+                                )}
+                              />
+                            </div>
+                            <p
+                              className={cn(
+                                "relative w-full truncate whitespace-nowrap border-t border-white/5 bg-slate-900/80 px-1 py-1 text-center text-[10px] font-light uppercase tracking-[0.15em] text-slate-300 backdrop-blur-md rounded-b-md transition-all duration-300",
+                                !disabled &&
+                                  !isSetFinished &&
+                                  "group-hover:bg-slate-800/60 group-hover:text-cyan-400",
+                              )}
+                            >
+                              {champion.nameKr}
+                              <span
+                                className={cn(
+                                  "pointer-events-none absolute inset-x-2 bottom-0 h-px rounded-full opacity-0 transition-opacity duration-300",
+                                  !disabled &&
+                                    !isSetFinished &&
+                                    "group-hover:opacity-100 group-hover:shadow-[0_0_10px_rgba(6,182,212,0.45)]",
+                                )}
+                                aria-hidden
+                              />
+                            </p>
+                          </div>
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             )}
-            <div className="mt-auto shrink-0 self-stretch">
+            <div className="mt-auto shrink-0 self-stretch pt-1">
             <AnimatePresence mode="wait">
               {!isSetFinished ? (
                 <motion.div

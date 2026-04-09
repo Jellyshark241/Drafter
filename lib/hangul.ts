@@ -26,10 +26,36 @@ const CHOSUNG_JAMO = [
 ] as const;
 
 const CHOSUNG_INPUT_SET = new Set<string>(CHOSUNG_JAMO);
+const DOUBLE_CONSONANTS: Record<string, string> = {
+  ㄳ: "ㄱㅅ",
+  ㄵ: "ㄴㅈ",
+  ㄶ: "ㄴㅎ",
+  ㄺ: "ㄹㄱ",
+  ㄻ: "ㄹㅁ",
+  ㄼ: "ㄹㅂ",
+  ㄽ: "ㄹㅅ",
+  ㄾ: "ㄹㅌ",
+  ㄿ: "ㄹㅍ",
+  ㅀ: "ㄹㅎ",
+  ㅄ: "ㅂㅅ",
+};
 
 /** 검색어·이름 공통: 공백 제거 + 영문 소문자 */
 export function normalizeForSearch(text: string): string {
   return text.replace(/\s+/g, "").toLowerCase();
+}
+
+/**
+ * 겹자음(받침 클러스터 입력)을 낱자 초성 문자열로 펼칩니다.
+ * 예) "ㄽ" -> "ㄹㅅ", "ㄶ" -> "ㄴㅎ"
+ */
+export function flattenDoubleConsonants(text: string): string {
+  const compact = normalizeForSearch(text);
+  let out = "";
+  for (const ch of compact) {
+    out += DOUBLE_CONSONANTS[ch] ?? ch;
+  }
+  return out;
 }
 
 /** 음절마다 초성만 이어붙임 (예: 가렌 → ㄱㄹ, 리 신 → ㄹㅅ) */
@@ -51,31 +77,48 @@ export function getChosungString(text: string): string {
 
 /** 입력이 ㄱ~ㅎ 계열만으로 이루어졌는지 (초성 전용 검색으로 간주) */
 export function isChosungOnlyQuery(text: string): boolean {
-  const compact = normalizeForSearch(text);
-  if (compact.length === 0) return false;
-  for (const ch of compact) {
+  const flattened = flattenDoubleConsonants(text);
+  if (flattened.length === 0) return false;
+  for (const ch of flattened) {
     if (!CHOSUNG_INPUT_SET.has(ch)) return false;
   }
   return true;
 }
 
 /** id → 별칭 (한글/영문 혼용 검색 보강) */
-const CHAMPION_SEARCH_ALIASES: Record<string, string[]> = {
+export const CHAMPION_ALIASES: Record<string, string[]> = {
   LeeSin: ["리신", "리 신"],
-  MonkeyKing: ["손오공", "원숭이", "wukong"],
-  AurelionSol: ["아우솔", "별드래곤"],
+  MonkeyKing: ["손오공", "원숭이", "오공", "wukong"],
+  AurelionSol: ["아우솔", "아우렐리온솔", "별드래곤"],
   JarvanIV: ["자르반", "자4"],
   XinZhao: ["신짜오", "짜오"],
   TwistedFate: ["트페", "tf"],
   MissFortune: ["미포", "mf"],
-  Nunu: ["누누"],
+  Nunu: ["누누", "누누와윌럼프", "누누와 윌럼프"],
+  Tristana: ["트타"],
+  Blitzcrank: ["블츠", "블크", "블리츠"],
+  Renata: ["레나타", "레나타글라스크", "레나타 글라스크"],
+  Kaisa: ["카이사", "카사"],
+  Khazix: ["카직스", "카직", "카직쓰"],
+  Fiddlesticks: ["피들", "피들스틱"],
+  TahmKench: ["탐켄치", "탐켄", "탐"],
+  KogMaw: ["코그모", "코그"],
+  Velkoz: ["벨코즈", "벨코", "벨"],
+  Chogath: ["초가스", "초가", "초"],
+  Heimerdinger: ["하이머딩거", "하이머", "딩거", "하딩"],
+  Mordekaiser: ["모데카이저", "모데"],
+  Malzahar: ["말자하", "말자"],
+  Hecarim: ["헤카림", "헤카"],
+  Graves: ["그레이브즈", "그브"],
+  Volibear: ["볼리베어", "볼베"],
+  Caitlyn: ["케이틀린", "케틀"],
+  MasterYi: ["마스터이", "마이"],
+  Cassiopeia: ["카시오페아", "카시"],
+  Leblanc: ["르블랑", "르블"],
+  Renekton: ["레넥톤", "렉톤"],
+  Trundle: ["트런들", "트런"],
+  JarvanIV: ["자르반4세", "자4", "자르반"],
 };
-
-function matchesAlias(id: string, normalizedQuery: string): boolean {
-  const list = CHAMPION_SEARCH_ALIASES[id];
-  if (!list?.length) return false;
-  return list.some((alias) => normalizeForSearch(alias).includes(normalizedQuery));
-}
 
 export type ChampionSearchFields = {
   id: string;
@@ -83,7 +126,46 @@ export type ChampionSearchFields = {
   nameEn: string;
   /** 미리 계산된 초성 문자열 (선택, 없으면 nameKr에서 계산) */
   chosungKr?: string;
+  /** 챔피언 별칭 배열 (선택) */
+  alias?: string[];
 };
+
+function matchesAlias(champion: ChampionSearchFields, processedQuery: string): boolean {
+  const mergedAliases = [...(champion.alias ?? []), ...(CHAMPION_ALIASES[champion.id] ?? [])];
+  if (!mergedAliases.length) return false;
+  return mergedAliases.some((a) =>
+    flattenDoubleConsonants(normalizeForSearch(a)).includes(processedQuery),
+  );
+}
+
+export function createChampionSearchPredicate(queryRaw: string) {
+  // 1) Space-insensitive normalize first
+  const q = normalizeForSearch(queryRaw);
+  if (q.length === 0) {
+    return () => true;
+  }
+
+  // 2) Decompose complex consonants for stable chosung matching
+  const flattenedQ = flattenDoubleConsonants(q);
+  const isChosungQuery = isChosungOnlyQuery(flattenedQ);
+  const allowAliasMatch = flattenedQ.length >= 2;
+
+  return (champion: ChampionSearchFields): boolean => {
+    // 3) If query is consonant-only, compare against chosung string first.
+    if (isChosungQuery) {
+      const chs = champion.chosungKr ?? getChosungString(champion.nameKr);
+      if (chs.length > 0 && chs.includes(flattenedQ)) return true;
+      return allowAliasMatch && matchesAlias(champion, flattenedQ);
+    }
+
+    // 4) Otherwise perform full-text contains match (space-insensitive)
+    const kr = normalizeForSearch(champion.nameKr);
+    const en = normalizeForSearch(champion.nameEn);
+    if (kr.includes(q) || en.includes(q)) return true;
+
+    return allowAliasMatch && matchesAlias(champion, flattenedQ);
+  };
+}
 
 /**
  * 다중 매칭: (1) 전체 부분일치 (2) 초성 일치 (3) 별칭
@@ -93,21 +175,5 @@ export function matchesChampionSearch(
   champion: ChampionSearchFields,
   queryRaw: string,
 ): boolean {
-  const q = normalizeForSearch(queryRaw);
-  if (q.length === 0) return true;
-
-  const kr = normalizeForSearch(champion.nameKr);
-  const en = normalizeForSearch(champion.nameEn);
-
-  if (kr.includes(q) || en.includes(q)) return true;
-
-  if (isChosungOnlyQuery(q)) {
-    const chs = champion.chosungKr ?? getChosungString(champion.nameKr);
-    if (chs.length === 0) return false;
-    return chs.includes(q);
-  }
-
-  if (matchesAlias(champion.id, q)) return true;
-
-  return false;
+  return createChampionSearchPredicate(queryRaw)(champion);
 }

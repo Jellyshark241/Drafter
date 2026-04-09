@@ -1,7 +1,4 @@
-import {
-  getChampionPositions,
-  type LaneFilter,
-} from "@/lib/champion-positions";
+import { getChampionMainRoles, type LaneFilter } from "@/lib/champion-roles";
 import { getSplashPosition } from "@/lib/champion-splash-positions";
 import { getChosungString } from "@/lib/hangul";
 
@@ -55,7 +52,7 @@ export const fetchAllChampions = async (): Promise<ChampionCard[]> => {
     nameKr: champion.name,
     nameEn: champion.id,
     tags: champion.tags,
-    positions: getChampionPositions(champion.id, champion.tags),
+    positions: getChampionMainRoles(champion.id),
     chosungKr: getChosungString(champion.name),
     image: `${DATA_DRAGON_BASE}/cdn/${latest}/img/champion/${champion.image.full}`,
     loadingImage: `${DATA_DRAGON_BASE}/cdn/img/champion/loading/${champion.id}_0.jpg`,
