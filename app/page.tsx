@@ -438,41 +438,6 @@ function TeamColumn({
                       isPendingPreview && "opacity-50",
                     )}
                   />
-                  <AnimatePresence mode="wait">
-                    {showChampionBanFeedback ? (
-                      <motion.svg
-                        key={`${side}-ban-${idx}-champion-x`}
-                        className="absolute inset-0 z-20 h-full w-full p-[3px] text-red-500/80 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)] [filter:drop-shadow(0_0_28px_rgba(239,68,68,0.35))]"
-                        viewBox="0 0 100 100"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: [1.1, 1], opacity: 1 }}
-                        exit={{ scale: 0.95, opacity: 0 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                        aria-hidden
-                      >
-                        <line
-                          x1="10"
-                          y1="10"
-                          x2="90"
-                          y2="90"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                        />
-                        <line
-                          x1="90"
-                          y1="10"
-                          x2="10"
-                          y2="90"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                        />
-                      </motion.svg>
-                    ) : null}
-                  </AnimatePresence>
                 </>
               ) : (
                 <div className="relative h-full w-full">
@@ -492,32 +457,6 @@ function TeamColumn({
                           animate={{ opacity: 1 }}
                           transition={{ duration: 0.2 }}
                         />
-                        <svg
-                          className="absolute inset-0 z-20 h-full w-full p-[3px] text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)] [filter:drop-shadow(0_0_28px_rgba(239,68,68,0.35))]"
-                          viewBox="0 0 100 100"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                          aria-hidden
-                        >
-                          <line
-                            x1="10"
-                            y1="10"
-                            x2="90"
-                            y2="90"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                          />
-                          <line
-                            x1="90"
-                            y1="10"
-                            x2="10"
-                            y2="90"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                          />
-                        </svg>
                       </motion.div>
                     ) : (
                       <motion.div
@@ -732,6 +671,7 @@ export default function Home() {
     setPendingChampion,
     confirmSelection,
     swapTeamPicks,
+    undoLastTurn,
     resetDraft,
   } = useBanPickStore();
   const {
@@ -757,7 +697,10 @@ export default function Home() {
   const [champions, setChampions] = useState<ChampionCard[]>([]);
   const [loadingChampions, setLoadingChampions] = useState(true);
   const [championsLoadError, setChampionsLoadError] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
+  const [timer, setTimer] = useState<{ value: number; prev: number }>({
+    value: TURN_SECONDS,
+    prev: TURN_SECONDS,
+  });
   const [showSeriesOverlay, setShowSeriesOverlay] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -770,7 +713,7 @@ export default function Home() {
   const isProcessingTimeoutRef = useRef(false);
   const turnResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const prevTimeLeftRef = useRef(TURN_SECONDS);
+  const timeLeft = timer.value;
 
   useEffect(() => {
     fetchAllChampions()
@@ -808,8 +751,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!seriesWinner) {
-      setShowSeriesOverlay(false);
-      return;
+      const clearOverlay = setTimeout(() => setShowSeriesOverlay(false), 0);
+      return () => clearTimeout(clearOverlay);
     }
     const overlayDelay = setTimeout(() => {
       setShowSeriesOverlay(true);
@@ -819,12 +762,17 @@ export default function Home() {
 
   useEffect(() => {
     if (!isSetFinished) {
-      setIsSwapPhase(false);
-      setSelectedSwapSlot(null);
-      return;
+      const resetSwap = setTimeout(() => {
+        setIsSwapPhase(false);
+        setSelectedSwapSlot(null);
+      }, 0);
+      return () => clearTimeout(resetSwap);
     }
-    setIsSwapPhase(true);
-    setSelectedSwapSlot(null);
+    const enterSwap = setTimeout(() => {
+      setIsSwapPhase(true);
+      setSelectedSwapSlot(null);
+    }, 0);
+    return () => clearTimeout(enterSwap);
   }, [isSetFinished]);
 
   useEffect(() => {
@@ -839,13 +787,16 @@ export default function Home() {
     if (!isSetupComplete || !activeTurn || isSeriesOver) return;
 
     turnResetTimeoutRef.current = setTimeout(() => {
-      setTimeLeft(TURN_SECONDS);
+      setTimer((prev) => ({ prev: prev.value, value: TURN_SECONDS }));
     }, 0);
 
     if (!isTimerEnabled) return;
 
     timerIntervalRef.current = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      setTimer((prev) => {
+        const nextValue = prev.value > 0 ? prev.value - 1 : 0;
+        return { prev: prev.value, value: nextValue };
+      });
     }, 1000);
 
     return () => {
@@ -863,11 +814,7 @@ export default function Home() {
   const timerUrgent = isTimerEnabled && timeLeft < 10;
   const isZeroTime = isTimerEnabled && timeLeft === 0;
   const showTimerPulse = timerUrgent;
-  const isTurnResetTransition = prevTimeLeftRef.current === 0 && timeLeft === TURN_SECONDS;
-
-  useEffect(() => {
-    prevTimeLeftRef.current = timeLeft;
-  }, [timeLeft]);
+  const isTurnResetTransition = timer.prev === 0 && timer.value === TURN_SECONDS;
 
   const handleContactClick = async () => {
     try {
@@ -1016,17 +963,31 @@ export default function Home() {
         {!isSetupComplete ? <SetupScreen /> : null}
         {isSetupComplete ? (
           <>
-        <button
-          type="button"
-          onClick={() => {
-            resetDraft();
-            resetSeries();
-          }}
-          className="group fixed left-6 top-6 z-40 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-[9px] font-light tracking-[0.2em] uppercase text-slate-400 opacity-40 backdrop-blur-md transition-all duration-300 hover:border-white/30 hover:text-white hover:opacity-100 hover:drop-shadow-[0_0_10px_rgba(255,255,255,0.28)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
-        >
-          <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={1.6} aria-hidden />
-          <span>BACK TO SETUP</span>
-        </button>
+        <div className="fixed left-6 top-6 z-40 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              resetDraft();
+              resetSeries();
+            }}
+            className="group inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-[9px] font-light tracking-[0.2em] uppercase text-slate-400 opacity-40 backdrop-blur-md transition-all duration-300 hover:border-white/30 hover:text-white hover:opacity-100 hover:drop-shadow-[0_0_10px_rgba(255,255,255,0.28)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+          >
+            <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={1.6} aria-hidden />
+            <span>BACK TO SETUP</span>
+          </button>
+          <button
+            type="button"
+            disabled={currentTurn <= 0}
+            onClick={() => {
+              setIsSwapPhase(false);
+              setSelectedSwapSlot(null);
+              undoLastTurn();
+            }}
+            className="group inline-flex items-center justify-center rounded-md border border-white/10 bg-white/5 px-3 py-2 text-[9px] font-light tracking-[0.2em] uppercase text-slate-400 opacity-40 backdrop-blur-md transition-all duration-300 hover:border-white/30 hover:text-white hover:opacity-100 hover:drop-shadow-[0_0_10px_rgba(255,255,255,0.28)] disabled:cursor-not-allowed disabled:opacity-20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+          >
+            <span>UNDO</span>
+          </button>
+        </div>
         <div className="flex min-h-0 flex-1 flex-col gap-y-2">
         <div className="relative mb-1 mt-0 flex shrink-0 flex-col items-center gap-2">
           <div className="relative z-20">

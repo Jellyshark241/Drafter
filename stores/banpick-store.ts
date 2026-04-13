@@ -41,6 +41,7 @@ type BanPickState = {
     championId: string | null,
     options?: { isManual?: boolean },
   ) => void;
+  undoLastTurn: () => void;
   swapTeamPicks: (team: TeamSide, fromIndex: number, toIndex: number) => void;
   resetDraft: () => void;
 };
@@ -109,6 +110,22 @@ const putNoneBanInSlot = (teamSlots: TeamSlots, slotIndex: number): TeamSlots =>
   return {
     ...teamSlots,
     bans: cloned,
+  };
+};
+
+const clearSlot = (
+  teamSlots: TeamSlots,
+  type: DraftType,
+  slotIndex: number,
+): TeamSlots => {
+  const key = type === "pick" ? "picks" : "bans";
+  if (slotIndex < 0 || slotIndex >= teamSlots[key].length) return teamSlots;
+
+  const cloned = [...teamSlots[key]];
+  cloned[slotIndex] = null;
+  return {
+    ...teamSlots,
+    [key]: cloned,
   };
 };
 
@@ -185,6 +202,53 @@ export const useBanPickStore = create<BanPickState>((set, get) => ({
       blue: nextBlue,
       red: nextRed,
       currentTurn: currentTurn + 1,
+      disabledChampions: nextDisabled,
+      pendingChampion: null,
+      banStatus: nextBanStatus,
+    });
+  },
+  undoLastTurn: () => {
+    const { blue, red, currentTurn, draftOrder, disabledChampions, banStatus } =
+      get();
+    if (currentTurn <= 0) return;
+
+    const prevTurnIndex = currentTurn - 1;
+    const prevTurn = draftOrder[prevTurnIndex];
+    if (!prevTurn) return;
+
+    const teamSlots = prevTurn.team === "blue" ? blue : red;
+    const slotArray = prevTurn.type === "pick" ? teamSlots.picks : teamSlots.bans;
+    const championId = slotArray[prevTurn.slotIndex];
+
+    const nextBlue =
+      prevTurn.team === "blue" ? clearSlot(blue, prevTurn.type, prevTurn.slotIndex) : blue;
+    const nextRed =
+      prevTurn.team === "red" ? clearSlot(red, prevTurn.type, prevTurn.slotIndex) : red;
+
+    let nextDisabled = disabledChampions;
+    if (championId && championId !== NONE_BAN_TOKEN) {
+      const idx = disabledChampions.lastIndexOf(championId);
+      if (idx !== -1) {
+        nextDisabled = [
+          ...disabledChampions.slice(0, idx),
+          ...disabledChampions.slice(idx + 1),
+        ];
+      }
+    }
+
+    const nextBanStatus = { ...banStatus };
+    if (prevTurn.type === "ban") {
+      delete nextBanStatus[`${prevTurn.team}-${prevTurn.slotIndex}`];
+    }
+
+    set({
+      selections: {
+        blue: nextBlue,
+        red: nextRed,
+      },
+      blue: nextBlue,
+      red: nextRed,
+      currentTurn: prevTurnIndex,
       disabledChampions: nextDisabled,
       pendingChampion: null,
       banStatus: nextBanStatus,
